@@ -1,0 +1,65 @@
+services:
+  php-app:
+    build: .
+    container_name: ${APP_NAME}-php-app
+    volumes:
+      - .:/var/www/html
+    depends_on:
+      - db
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "netstat", "-tuln", "|", "grep", ":9000"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  nginx:
+    image: nginx:latest
+    container_name: ${APP_NAME}-nginx
+    ports:
+      - "${APP_PORT}:80"
+    volumes:
+      - ./nginx.conf.template:/etc/nginx/conf.d/default.conf.template  # Mount the template
+      - .:/var/www/html
+    environment:
+      - NGINX_SERVER_NAME=${NGINX_SERVER_NAME:-localhost}  # Pass the variable with a fallback
+    command: /bin/sh -c "envsubst '\${NGINX_SERVER_NAME}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"   # Substitute and start NGINX
+    depends_on:
+      - php-app
+    networks:
+      - app-network
+
+  db:
+    image: mysql:8
+    container_name: ${APP_NAME}-db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER_ID}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "3300:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - app-network
+  
+  adminer:
+    image: shyim/adminerevo:latest
+    container_name: ${APP_NAME}-db-tool
+    restart: always
+    ports:
+      - "${ADMINER_PORT}:8080" # Use ADMINER_PORT from .env
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+networks:
+  app-network:
+
+volumes:
+  db_data:
